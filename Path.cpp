@@ -52,13 +52,10 @@ void Path::InitPath( double Spread, double Offset, int blocksize, int numpaths, 
         m_NoiseSampRate = RATE_320;
         m_LPGain = 1.0;
     }
-    for(int i=0; i<INTP_QUE_SIZE; i++)
-    {
-        m_pQue0[i].x = 0.0; m_pQue0[i].y = 0.0;
-        m_pQue1[i].x = 0.0; m_pQue1[i].y = 0.0;
-        m_pQue2[i].x = 0.0; m_pQue2[i].y = 0.0;
-        m_pQue3[i].x = 0.0; m_pQue3[i].y = 0.0;
-    }
+    memset(m_pQue0, 0, sizeof(m_pQue0));
+    memset(m_pQue1, 0, sizeof(m_pQue1));
+    memset(m_pQue2, 0, sizeof(m_pQue2));
+    memset(m_pQue3, 0, sizeof(m_pQue3));
     m_LPGain = m_LPGain/ sqrt((double)numpaths);
     for(int i=0; i<250; i++)
         MakeGaussianDelaySample();		//pre load filter
@@ -99,8 +96,7 @@ cmplx offset;
 //SweepGenCpx(  &acc, 12.8, 0.0, 6.4, 0.016 );
 
                     j = m_FirState0/INTP_VALUE;
-                    m_pQue0[j].x = acc.x;
-                    m_pQue0[j].y = acc.y;
+                    m_pQue0[j] = acc;
                 }
             }
             if( m_NoiseSampRate <= RATE_64)
@@ -113,13 +109,13 @@ cmplx offset;
                     }
                     else
                     {
-                        acc.x = 0.0; acc.y = 0.0;
+                        acc.r = 0.0; acc.i = 0.0;
                         Firptr = m_pQue0;
                         Kptr = X5IntrpFIRCoef+INTP_FIR_SIZE-m_FirState0;
                         for(j=0; j<INTP_QUE_SIZE; j++)
                         {
-                            acc.x += ( (Firptr->x)*(*Kptr) );
-                            acc.y += ( (Firptr++->y)*(*Kptr) );
+                            acc.r += ( (Firptr->r)*(*Kptr) );
+                            acc.i += ( (Firptr++->i)*(*Kptr) );
                             Kptr += INTP_VALUE;
                         }
                         if( --m_FirState0 < 0)
@@ -129,8 +125,7 @@ cmplx offset;
 //SweepGenCpx(  &acc, 64, 0.0, 32.0, 0.08 );
 
                     j = m_FirState1/INTP_VALUE;
-                    m_pQue1[j].x = acc.x;
-                    m_pQue1[j].y = acc.y;
+                    m_pQue1[j] = acc;
                 }
             }
             if( m_Indx%(5*5) == 0 )	//interpolate/upsample x5
@@ -141,13 +136,13 @@ cmplx offset;
                 }
                 else
                 {
-                        acc.x = 0.0; acc.y = 0.0;
+                        acc.r = 0.0; acc.i = 0.0;
                         Firptr = m_pQue1;
                         Kptr = X5IntrpFIRCoef+INTP_FIR_SIZE-m_FirState1;
                         for(j=0; j<INTP_QUE_SIZE; j++)
                         {
-                            acc.x += ( (Firptr->x)*(*Kptr) );
-                            acc.y += ( (Firptr++->y)*(*Kptr) );
+                            acc.r += ( (Firptr->r)*(*Kptr) );
+                            acc.i += ( (Firptr++->i)*(*Kptr) );
                             Kptr += INTP_VALUE;
                         }
                         if( --m_FirState1 < 0)
@@ -157,18 +152,17 @@ cmplx offset;
 //SweepGenCpx(  &acc, 320, 0.0, 160.0, 0.4 );
 
                 j = m_FirState2/INTP_VALUE;
-                m_pQue2[j].x = acc.x;
-                m_pQue2[j].y = acc.y;
+                m_pQue2[j] = acc;
             }
             if( m_Indx%(5) == 0 )	//interpolate/upsample x5
             {
-                acc.x = 0.0; acc.y = 0.0;
+                acc.r = 0.0; acc.i = 0.0;
                 Firptr = m_pQue2;
                 Kptr = X5IntrpFIRCoef+INTP_FIR_SIZE-m_FirState2;
                 for(j=0; j<INTP_QUE_SIZE; j++)
                 {
-                    acc.x += ( (Firptr->x)*(*Kptr) );
-                    acc.y += ( (Firptr++->y)*(*Kptr) );
+                    acc.r += ( (Firptr->r)*(*Kptr) );
+                    acc.i += ( (Firptr++->i)*(*Kptr) );
                     Kptr += INTP_VALUE;
                 }
                 if( --m_FirState2 < 0)
@@ -177,16 +171,15 @@ cmplx offset;
 //SweepGenCpx(  &acc, 1600, 0.0, 800.0, 2 );
 
                 j = m_FirState3/INTP_VALUE;
-                m_pQue3[j].x = acc.x;
-                m_pQue3[j].y = acc.y;
+                m_pQue3[j] = acc;
             }
-            acc.x = 0.0; acc.y = 0.0;
+            acc.r = 0.0; acc.i = 0.0;
             Firptr = m_pQue3;
             Kptr = X5IntrpFIRCoef+INTP_FIR_SIZE-m_FirState3;
             for(j=0; j<INTP_QUE_SIZE; j++)
             {
-                acc.x += ( (Firptr->x)*(*Kptr) );
-                acc.y += ( (Firptr++->y)*(*Kptr) );
+                acc.r += ( (Firptr->r)*(*Kptr) );
+                acc.i += ( (Firptr++->i)*(*Kptr) );
                 Kptr += INTP_VALUE;
             }
             if( --m_FirState3 < 0)
@@ -194,12 +187,12 @@ cmplx offset;
 
 //CalcCpxSweepRMS( acc, 8000);
 
-            tmp.x = (acc.x*pIn[i].x - acc.y*pIn[i].y);
-            tmp.y = (acc.x*pIn[i].y + acc.y*pIn[i].x);
-            offset.x = cos(m_Timeinc);		//Cpx multiply by offset frequency
-            offset.y = sin(m_Timeinc);
-            pOut[i].x = ((offset.x*tmp.x) - (offset.y*tmp.y));
-            pOut[i].y = ((offset.x*tmp.y) + (offset.y*tmp.x));
+            tmp.r = (acc.r*pIn[i].r - acc.i*pIn[i].i);
+            tmp.i = (acc.r*pIn[i].i + acc.i*pIn[i].r);
+            offset.r = cos(m_Timeinc);		//Cpx multiply by offset frequency
+            offset.i = sin(m_Timeinc);
+            pOut[i].r = ((offset.r*tmp.r) - (offset.i*tmp.i));
+            pOut[i].i = ((offset.r*tmp.i) + (offset.i*tmp.r));
             m_Timeinc += (OFFSET_FREQ_CONST*m_Offset);
             m_Timeinc = fmod(m_Timeinc,K_2PI);	//keep radian counter bounded
             if( ++m_Indx > (INTP_VALUE*INTP_VALUE*INTP_VALUE*INTP_VALUE*m_BlockSize) )
@@ -207,13 +200,7 @@ cmplx offset;
         }
     }
     else		// if path is not active just zero the output
-    {
-        for(i=0; i<m_BlockSize; i++)
-        {
-            pOut[i].x = 0.0;
-            pOut[i].y = 0.0;
-        }
-    }
+        memset(pOut, 0, sizeof(cmplx) * m_BlockSize);
 }
 
 // Create the complex Rayleigh distributed samples by
@@ -227,14 +214,14 @@ cmplx Path::MakeGaussianDelaySample()
         // Generate two uniform random numbers between -1 and +1 that are inside the unit circle
         double r2;
         do {
-            val.x = 1.0 - 2.0 * (double)rand()/(double)RAND_MAX;
-            val.y = 1.0 - 2.0 * (double)rand()/(double)RAND_MAX;
-            r2 = val.x * val.x + val.y * val.y;
+            val.r = 1.0 - 2.0 * (double)rand()/(double)RAND_MAX;
+            val.i = 1.0 - 2.0 * (double)rand()/(double)RAND_MAX;
+            r2 = val.r * val.r + val.i * val.i;
         } while (r2 >= 1.0 || r2 == 0.0);
 
         double scale = m_LPGain * sqrt(- 2.0 * log(r2) / r2);
-        val.x *= scale;
-        val.y *= scale;
+        val.r *= scale;
+        val.i *= scale;
 
         //SweepGenCpx(  &val, 320, 0.0, 30*5, 30*5/200.0);
 
@@ -243,8 +230,8 @@ cmplx Path::MakeGaussianDelaySample()
     } else
     {
         // Not using any spread.
-        val.x = m_LPGain;
-        val.y = 0;
+        val.r = m_LPGain;
+        val.i = 0;
     }
 
     //gDebug1 = CalcCpxRMS( val, 288000);

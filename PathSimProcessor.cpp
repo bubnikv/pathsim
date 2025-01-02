@@ -85,7 +85,7 @@ void PathSimProcessor::process_buffer(double *buffer)
         m_path2.CalcPath(m_pDelay2Buf.data(), m_pDelay2Buf.data());
 // Sum and Copy just the real part back into the real buffer for output
         for( int i = 0; i<BUF_SIZE; i++)
-            buffer[i] = m_pDelay0Buf[i].x + m_pDelay1Buf[i].x + m_pDelay2Buf[i].x;
+            buffer[i] = m_pDelay0Buf[i].r + m_pDelay1Buf[i].r + m_pDelay2Buf[i].r;
     }
     if(m_params.has_awgn)	//if AWGN is used, figure out gains for SNR
     {

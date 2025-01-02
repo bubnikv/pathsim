@@ -32,8 +32,8 @@ cmplx GaussFIR::CalcFilter(const cmplx in)
 	cmplx  acc;
     const double *coeff = m_coef.data() + m_FIRlen - m_data_ptr;
 	for (int i = 0; i < m_FIRlen; ++ i, ++ coeff) {
-        acc.x += m_data[i].x * *coeff;
-        acc.y += m_data[i].y * *coeff;
+        acc.r += m_data[i].r * *coeff;
+        acc.i += m_data[i].i * *coeff;
 	}
 	if (-- m_data_ptr < 0)
 		m_data_ptr += m_FIRlen;

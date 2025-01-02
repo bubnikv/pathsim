@@ -9,14 +9,8 @@ namespace PathSim {
 //  Set delay times
 void Delay::SetDelays( double t1, double t2)	//delays in msecs
 {
-    for( int i = 0; i<HILBPFIR_LENGTH; ++ i) {
-		m_queue[i].x = 0.0;
-		m_queue[i].y = 0.0;
-	}
-    for( int i = 0; i<BUFSIZE; ++ i) {
-		m_delay_line[i].x = 0.0;
-		m_delay_line[i].y = 0.0;
-	}
+	memset(m_queue, 0, sizeof(m_queue));
+	memset(m_delay_line, 0, sizeof(m_delay_line));
 	m_Inptr = BUFSIZE-1;
 	m_FirState = HILBPFIR_LENGTH-1;
 	m_T1ptr = BUFSIZE - (int)(8.0*t1) - 1;
@@ -52,20 +46,19 @@ void Delay::CalcBPFilter(double* pIn, cmplx* pOut)
 	int j;
 	for(int i=0; i<BLOCKSIZE; i++)
 	{
-		m_queue[m_FirState].x = pIn[i];	//place real values in circular Queue
-		m_queue[m_FirState].y = pIn[i];
+		m_queue[m_FirState].r = pIn[i];	//place real values in circular Queue
+		m_queue[m_FirState].i = pIn[i];
         Firptr = m_queue;
 		IKptr = IHilbertBPFirCoef+HILBPFIR_LENGTH-m_FirState;
 		QKptr = QHilbertBPFirCoef+HILBPFIR_LENGTH-m_FirState;	//
-		acc.x = 0.0;
-		acc.y = 0.0;
+		acc.r = 0.0;
+		acc.i = 0.0;
 		for(j=0; j<	HILBPFIR_LENGTH;j++)
 		{
-			acc.x += ( (Firptr->x)*(*IKptr++) );
-			acc.y += ( (Firptr++->y)*(*QKptr++) );
+			acc.r += ( (Firptr->r)*(*IKptr++) );
+			acc.i += ( (Firptr++->i)*(*QKptr++) );
 		}
-		pOut[i].x = acc.x;
-		pOut[i].y = acc.y;
+		pOut[i] = acc;
 		if( --m_FirState < 0)
 			m_FirState = HILBPFIR_LENGTH-1;
 	}

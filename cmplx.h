@@ -4,8 +4,8 @@
 namespace PathSim {
 
 struct cmplx {
-	double x { 0. };
-	double y { 0. };
+	double r { 0. };
+	double i { 0. };
 };
 
 } // namespace PathSim

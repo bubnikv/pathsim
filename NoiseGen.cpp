@@ -2,6 +2,10 @@
 
 #include <math.h>
 
+#ifdef WIN32
+#include <stdlib.h>
+#endif // WIN32
+
 namespace PathSim {
 
 // Obtained experimentally to compensate for BP filter.
