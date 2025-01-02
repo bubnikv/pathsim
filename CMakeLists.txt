@@ -7,8 +7,6 @@ set(PathSimSources
     cmplx.h
     Delay.cpp
     Delay.h
-    fft.cpp
-    fft.h
     FilterTables.h
     GaussFIR.cpp
     GaussFIR.h
