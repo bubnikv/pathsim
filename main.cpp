@@ -109,6 +109,10 @@ from a Windows GUI application by Moe Wheatley, AE4JY, 2000\n\
 
         AudioFile<double> audio_file;
         bool loaded  = audio_file.load(input_file);
+        if (! loaded) {
+            std::cout << "failed loading input file: " << input_file << std::endl;
+            exit(1);
+        }
         int  len     = audio_file.getNumSamplesPerChannel();
         int  nblocks = (len + PathSimProcessor::BUF_SIZE - 1) / PathSimProcessor::BUF_SIZE;
 

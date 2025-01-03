@@ -5,7 +5,7 @@ namespace PathSim {
 // RMS amplitude out of 32768
 // pick so that worst case Gaussian noise
 // plus signals will not overflow soundcard
-static constexpr double RMS_MAXAMPLITUDE = 4000.0;
+static constexpr double RMS_MAXAMPLITUDE = 0.122; // 4000. / 32768.;
 
 static constexpr double RMSAVE = 20.;
 
@@ -37,6 +37,7 @@ void PathSimProcessor::init(const PathSimParams& params)
         }
     }
 
+    m_SNR = pow(10., params.noise.snr / 20.0);
     m_SigRMS = RMS_MAXAMPLITUDE;
 }
 
@@ -61,7 +62,8 @@ void PathSimProcessor::process_buffer(double *buffer)
         static_assert(m_hilbert.BLOCKSIZE == this->BUF_SIZE, "Buffer length has to be satisfied");
         m_hilbert.filter_block(buffer, m_paths.front().buffer.data());
         static_assert(m_delay.BLOCKSIZE == this->BUF_SIZE, "Buffer length has to be satisfied");
-        std::vector<std::vector<cmplx>*> buffers(m_paths.size(), nullptr);
+        std::vector<std::vector<cmplx>*> buffers;
+        buffers.reserve(m_paths.size() - 1);
         for (size_t i = 1; i < m_paths.size(); ++ i)
             buffers.emplace_back(&m_paths[i].buffer);
         m_delay.delay_block(m_paths.front().buffer, buffers);

@@ -23,24 +23,24 @@ static inline double dnorm(double x, double mu, double sigma)
 void GaussFIR::init(double Fs, double F2sig)
 {
 	double sigma   = (Fs * SQRT2) / (PI2 * F2sig);
-	int    fir_len = int(0.5 + K_GAUSSIAN * Fs / F2sig);
-	if (! (fir_len & 1))
+	m_fir_len = int(0.5 + K_GAUSSIAN * Fs / F2sig);
+	if (! (m_fir_len & 1))
 		// make FIR length odd
-		++ fir_len;
+		++ m_fir_len;
 	// Allocate buffer and Coefficient memory based on calculated FIR length.
-    m_coef.assign(fir_len * 2, 0.);
-    m_data.assign(fir_len, cmplx());
+    m_coef.assign(m_fir_len * 2, 0.);
+    m_data.assign(m_fir_len, cmplx());
 	// generate the scaled Gaussian shaped impulse response	to create a 0 dB
 	//   passband LP filter with a 2 Sigma frequency bandwidth.
-	int index = - (fir_len - 1) / 2;
+	int index = - (m_fir_len - 1) / 2;
 	double norm = (1.0 / (SQRT2PI * sigma)) / dnorm(0.0, 0.0, sigma);
-	for (int i = 0; i < fir_len; ++ i, ++ index) {
+	for (int i = 0; i < m_fir_len; ++ i, ++ index) {
 		m_coef[i] = norm * dnorm(index, 0.0, sigma);
 		// make duplicate for flat FIR
-		m_coef[i + fir_len] = m_coef[i];
+		m_coef[i + m_fir_len] = m_coef[i];
 	}
 	// used for flat FIR implementation
-	m_data_ptr = fir_len - 1;
+	m_data_ptr = m_fir_len - 1;
 }
 
 // Calculate complex Gaussian FIR filter iteration for one sample.
@@ -48,12 +48,12 @@ cmplx GaussFIR::apply(const cmplx in)
 {
 	m_data[m_data_ptr] = in;
 	cmplx acc{ 0., 0. };
-    const double *coeff = m_coef.data() + m_coef.size() - m_data_ptr;
-	for (size_t i = 0; i < m_coef.size(); ++ i, ++ coeff)
+    const double *coeff = m_coef.data() + m_fir_len - m_data_ptr;
+	for (int i = 0; i < m_fir_len; ++ i, ++ coeff)
 		// Filter each vector component by a Gaussian kernel.
         acc += m_data[i] * *coeff;
 	if (-- m_data_ptr < 0)
-		m_data_ptr += int(m_coef.size());
+		m_data_ptr += m_fir_len;
 	return acc;
 }
 

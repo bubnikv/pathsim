@@ -23,9 +23,13 @@ public:
     void process_buffer(double *buffer);
 
 private:
+    // RMS of the input signal, absolute value.
     double                  m_SigRMS 		{ 0. };
+    // Gain factor to apply to the input signal to maintain reasonable dynamic range on 16bit WAVs.
     double                  m_SignalGain 	{ 0. };
+    // Noise RMS applied to the last buffer, absolute value.
     double                  m_NoiseRMS  	{ 0. };
+    // Input SNR parameter, fraction, not dB
     double                  m_SNR 			{ 0. };
 
     struct PathWithBuffer {

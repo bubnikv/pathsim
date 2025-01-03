@@ -16,8 +16,10 @@ public:
 	cmplx 	apply(const cmplx in);
 
 private:
-	// Gaussian filter coefficients
+	// Gaussian filter coefficients, repeated so that the filter ptr does not have to roll over.
 	std::vector<double> m_coef;
+	// Lenght of the FIR filter
+	int					m_fir_len;
 	// Circular queue of filtered samples.
 	std::vector<cmplx> 	m_data;
 	int 				m_data_ptr { 0 };
