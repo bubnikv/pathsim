@@ -9,25 +9,35 @@
 
 namespace PathSim {
 
+class Hilbert
+{
+public:
+    static constexpr int BLOCKSIZE  = 2048;
+
+    void init();
+    void filter_block(const double* pIn, cmplx* pOut);
+
+private:
+    cmplx m_hilbert_queue[HILBPFIR_LENGTH];
+    int   m_hilbert_ptr = 0;
+};
+
 class Delay
 {
 public:
-	void CreateDelays( cmplx* inbuf, cmplx* t1buf, cmplx* t2buf );
-	void SetDelays( double t1, double t2);
-	void CalcBPFilter(double* pIn, cmplx* pOut);
-
-private:
     // 50mSecs max delay
     static constexpr int MAXDELAY   = 50 * 8;
-    static constexpr int BLOCKSIZE  = 2048;
+    static constexpr int BLOCKSIZE  = Hilbert::BLOCKSIZE;
     static constexpr int BUFSIZE    = BLOCKSIZE + MAXDELAY;
 
+    void init();
+    void add_delay(double time_ms);
+    void delay_block(const std::vector<cmplx> &inbuf, std::vector<std::vector<cmplx>*> &out_buffers);
+
+private:
     cmplx 	m_delay_line[BUFSIZE];
-    cmplx 	m_queue[HILBPFIR_LENGTH];
-    int 	m_FirState = 0;
-    int 	m_T1ptr = 0;
-    int 	m_T2ptr = 0;
-    int 	m_Inptr = 0;
+    int 	m_in_ptr = 0;
+    std::vector<int> m_out_ptrs;
 };
 
 } // namespace PathSim

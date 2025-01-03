@@ -1,42 +1,59 @@
+// Gaussian low pass filter
+
 #include "GaussFIR.h"
 
 namespace PathSim {
 
+static constexpr double SQRT2PI = 2.506628274631000502415765284811;
+static constexpr double PI2     = 6.283185307179586476925286766559;
+static constexpr double SQRT2 	= 1.4142135623730950488016887242097;
+
+// constant determines accuracy of Gaussian LPFIR.
+// larger number makes FIR longer but more accurate
+// This value is good to about -50 dB
+static constexpr double K_GAUSSIAN = 1.4;
+
+// Gaussian (Normal) distribution function.
+static inline double dnorm(double x, double mu, double sigma) 
+{ 
+	return (1.0/(SQRT2PI*sigma))*exp((-1.0/(2.0*sigma*sigma))*(x-mu)*(x-mu));
+}
+
 // Calculate length and FIR coefficients for a Gaussian shaped low pass filter.
-void GaussFIR::Init(double Fs, double F2sig)
+void GaussFIR::init(double Fs, double F2sig)
 {
-	double sigma = (Fs * SQRT2) / (PI2 * F2sig);
-	m_FIRlen = int(0.5 + K_GAUSSIAN * Fs / F2sig);
-	if (! (m_FIRlen & 1))
-		// make FIR length ODD
-		++ m_FIRlen;
+	double sigma   = (Fs * SQRT2) / (PI2 * F2sig);
+	int    fir_len = int(0.5 + K_GAUSSIAN * Fs / F2sig);
+	if (! (fir_len & 1))
+		// make FIR length odd
+		++ fir_len;
 	// Allocate buffer and Coefficient memory based on calculated FIR length.
-    m_coef.assign(m_FIRlen * 2, 0.);
-    m_data.assign(m_FIRlen, cmplx());
+    m_coef.assign(fir_len * 2, 0.);
+    m_data.assign(fir_len, cmplx());
 	// generate the scaled Gaussian shaped impulse response	to create a 0 dB
 	//   passband LP filter with a 2 Sigma frequency bandwidth.
-	int indx = - (m_FIRlen - 1) / 2;
-	for (int i = 0; i < m_FIRlen; ++ i, ++ indx) {
-		m_coef[i] = (1.0 / (SQRT2PI * sigma)) * dnorm(indx, 0.0, sigma) / dnorm(0.0, 0.0, sigma);
+	int index = - (fir_len - 1) / 2;
+	double norm = (1.0 / (SQRT2PI * sigma)) / dnorm(0.0, 0.0, sigma);
+	for (int i = 0; i < fir_len; ++ i, ++ index) {
+		m_coef[i] = norm * dnorm(index, 0.0, sigma);
 		// make duplicate for flat FIR
-		m_coef[i + m_FIRlen] = m_coef[i];
+		m_coef[i + fir_len] = m_coef[i];
 	}
 	// used for flat FIR implementation
-	m_data_ptr = m_FIRlen - 1;
+	m_data_ptr = fir_len - 1;
 }
 
 // Calculate complex Gaussian FIR filter iteration for one sample.
-cmplx GaussFIR::CalcFilter(const cmplx in)
+cmplx GaussFIR::apply(const cmplx in)
 {
 	m_data[m_data_ptr] = in;
-	cmplx  acc;
-    const double *coeff = m_coef.data() + m_FIRlen - m_data_ptr;
-	for (int i = 0; i < m_FIRlen; ++ i, ++ coeff) {
-        acc.r += m_data[i].r * *coeff;
-        acc.i += m_data[i].i * *coeff;
-	}
+	cmplx acc{ 0., 0. };
+    const double *coeff = m_coef.data() + m_coef.size() - m_data_ptr;
+	for (size_t i = 0; i < m_coef.size(); ++ i, ++ coeff)
+		// Filter each vector component by a Gaussian kernel.
+        acc += m_data[i] * *coeff;
 	if (-- m_data_ptr < 0)
-		m_data_ptr += m_FIRlen;
+		m_data_ptr += int(m_coef.size());
 	return acc;
 }
 

@@ -6,61 +6,58 @@
 
 namespace PathSim {
 
-//  Set delay times
-void Delay::SetDelays( double t1, double t2)	//delays in msecs
+void Hilbert::init()
 {
-	memset(m_queue, 0, sizeof(m_queue));
-	memset(m_delay_line, 0, sizeof(m_delay_line));
-	m_Inptr = BUFSIZE-1;
-	m_FirState = HILBPFIR_LENGTH-1;
-	m_T1ptr = BUFSIZE - (int)(8.0*t1) - 1;
-	m_T2ptr = BUFSIZE - (int)(8.0*t2) - 1;
-}
-
-//  Uses pointers to create variable delays
-void Delay::CreateDelays( cmplx* inbuf, cmplx* t1buf, cmplx* t2buf )
-{
-    for (int i=0; i<BLOCKSIZE; i++)
-	{
-		m_delay_line[m_Inptr++] = inbuf[i]; // copy new data from inbuf into delay buffer
-		if( m_Inptr >= BUFSIZE )
-			m_Inptr = 0;
-		t1buf[i] = m_delay_line[m_T1ptr++];
-		if( m_T1ptr >= BUFSIZE )
-			m_T1ptr = 0;
-		t2buf[i] = m_delay_line[m_T2ptr++];
-		if( m_T2ptr >= BUFSIZE )
-			m_T2ptr = 0;
-	}
+	memset(m_hilbert_queue, 0, sizeof(m_hilbert_queue));
+	m_hilbert_ptr = HILBPFIR_LENGTH - 1;
 }
 
 // Hilbert 3KHz BP filters.  Real input and complex I/Q output
 //   This FIR bandwidth limits the real input as well as creates a
 //   complex I/Q output signal for the rest of the processing chain.
-void Delay::CalcBPFilter(double* pIn, cmplx* pOut)
+void Hilbert::filter_block(const double* pIn, cmplx* pOut)
 {
-	cmplx acc;
-	const double* IKptr;
-	const double* QKptr;
-	cmplx* Firptr;
-	int j;
-	for(int i=0; i<BLOCKSIZE; i++)
-	{
-		m_queue[m_FirState].r = pIn[i];	//place real values in circular Queue
-		m_queue[m_FirState].i = pIn[i];
-        Firptr = m_queue;
-		IKptr = IHilbertBPFirCoef+HILBPFIR_LENGTH-m_FirState;
-		QKptr = QHilbertBPFirCoef+HILBPFIR_LENGTH-m_FirState;	//
-		acc.r = 0.0;
-		acc.i = 0.0;
-		for(j=0; j<	HILBPFIR_LENGTH;j++)
-		{
-			acc.r += ( (Firptr->r)*(*IKptr++) );
-			acc.i += ( (Firptr++->i)*(*QKptr++) );
-		}
+	for (int i = 0; i < BLOCKSIZE; ++ i) {
+		m_hilbert_queue[m_hilbert_ptr].set(pIn[i], pIn[i]);	//place real values in circular Queue
+		const cmplx* Firptr = m_hilbert_queue;
+		const double* IKptr = IHilbertBPFirCoef+HILBPFIR_LENGTH-m_hilbert_ptr;
+		const double* QKptr = QHilbertBPFirCoef+HILBPFIR_LENGTH-m_hilbert_ptr;
+		cmplx acc{0., 0.};
+		for (int j = 0; j < HILBPFIR_LENGTH; ++ j, ++ Firptr)
+			acc += (*Firptr) * (*IKptr++);
 		pOut[i] = acc;
-		if( --m_FirState < 0)
-			m_FirState = HILBPFIR_LENGTH-1;
+		if (-- m_hilbert_ptr < 0)
+			m_hilbert_ptr = HILBPFIR_LENGTH - 1;
+	}
+}
+
+void Delay::init()
+{
+	memset(m_delay_line, 0, sizeof(m_delay_line));
+	m_in_ptr = BUFSIZE - 1;
+	m_out_ptrs.clear();
+}
+
+void Delay::add_delay(double time_ms)
+{
+	m_out_ptrs.emplace_back(int(BUFSIZE - int(8.0 * time_ms) - 1));
+}
+
+// Uses pointers to create variable delays
+void Delay::delay_block(const std::vector<cmplx> &inbuf, std::vector<std::vector<cmplx>*> &out_buffers)
+{
+    for (int i = 0; i < BLOCKSIZE; ++ i) {
+		// Copy new data from inbuf into delay buffer
+		m_delay_line[m_in_ptr ++] = inbuf[i];
+		if (m_in_ptr >= BUFSIZE)
+			m_in_ptr = 0;
+		// Delay to the output buffers.
+		for (int j = 0; j < m_out_ptrs.size(); ++ j) {
+			int& ptr = m_out_ptrs[j];
+			(*out_buffers[j])[i] = m_delay_line[ptr ++];
+			if (ptr >= BUFSIZE)
+				ptr = 0;
+		}
 	}
 }
 

@@ -32,8 +32,8 @@ from a Windows GUI application by Moe Wheatley, AE4JY, 2000\n\
 
 		{
 		    auto group = options.add_options("Propagation condition");
-		    for (int i = 0; i < default_params_cnt; ++ i)
-		        group(defaut_params[i].cmdline_param, defaut_params[i].title);
+		    for (const PathSimParams &params : default_params())
+                group(params.cmdline_param, params.title);
 		}
 
 	    options.add_options("Propagation")
@@ -68,55 +68,43 @@ from a Windows GUI application by Moe Wheatley, AE4JY, 2000\n\
 
         PathSimParams params;
         // Parse the propagation condition parameter sets.
-        for (int i = 0; i < default_params_cnt; ++ i)
-            if (result.count(defaut_params[i].cmdline_param) > 0) {
+        for (const PathSimParams &p : default_params())
+            if (result.count(p.cmdline_param) > 0) {
                 if (params.cmdline_param.empty())
-                    params = defaut_params[i];
+                    params = p;
                 else {
-                    std::cerr << "pathsim: parameter " << defaut_params[i].cmdline_param << " overrides " << params.cmdline_param << std::endl;
+                    std::cerr << "pathsim: parameter " << p.cmdline_param << " overrides " << params.cmdline_param << std::endl;
                     std::cerr << "Use just one propagation condition parameter.";
                     return -1;
                 }
             }
 
-        if (result.count("snr")) {
-            params.has_awgn = true;
-            params.snr = result["snr"].as<double>();
-        }
+        if (result.count("snr"))
+            params.noise = { true, result["snr"].as<double>() };
 
-        if (result.count("spread")) {
-            params.has_path0 = true;
-            params.spread0   = result["spread"].as<double>();
-        }
-        if (result.count("offset")) {
-            params.has_path0 = true;
-            params.offset0   = result["offset"].as<double>();
-        }
-
-        if (result.count("delay2")) {
-            params.has_path1 = true;
-            params.delay2   = result["delay2"].as<double>();
-        }
-        if (result.count("spread2")) {
-            params.has_path1 = true;
-            params.spread1   = result["spread2"].as<double>();
-        }
-        if (result.count("offset2")) {
-            params.has_path1 = true;
-            params.offset1   = result["offset2"].as<double>();
-        }
-
-        if (result.count("delay2")) {
-            params.has_path2 = true;
-            params.delay2   = result["delay2"].as<double>();
-        }
-        if (result.count("spread2")) {
-            params.has_path2 = true;
-            params.spread2   = result["spread2"].as<double>();
-        }
-        if (result.count("offset2")) {
-            params.has_path2 = true;
-            params.offset2   = result["offset2"].as<double>();
+        for (int i = 0; i < 3; ++ i) {
+            auto init_path = [i, &params](){
+                if (int(params.paths.size()) <= i)
+                    params.paths.push_back({});
+            };
+            std::string sidx;
+            if (i > 0)
+                sidx = std::to_string(i);
+            std::string delay = std::string("delay") + sidx;
+            if (result.count(delay)) {
+                init_path();
+                params.paths.back().delay = result[delay].as<double>();
+            }
+            std::string spread = std::string("spread") + sidx;
+            if (result.count(spread)) {
+                init_path();
+                params.paths.back().spread = result[spread].as<double>();
+            }
+            std::string offset = std::string("offset") + sidx;
+            if (result.count(offset)) {
+                init_path();
+                params.paths.back().offset = result[offset].as<double>();
+            }
         }
 
         AudioFile<double> audio_file;
@@ -142,38 +130,3 @@ from a Windows GUI application by Moe Wheatley, AE4JY, 2000\n\
 
 	return 0;
 }
-
-#if 0
-//////////////////////////////////////////////////////////////////////
-// Called when the process has new FFT data to display every .256 seconds.
-//////////////////////////////////////////////////////////////////////
-afx_msg LRESULT CPathSimView::OnDataRdy(UINT x, long y)
-{
-	CPathSimDoc* pDoc;
-	std::string str;
-	double Ngain, Sgain;
-	pDoc = GetDocument();
-	ASSERT_VALID( pDoc );
-	m_pCIOCntrl->ReadGains(Ngain, Sgain);
-	str.Format("%g",Ngain );
-	m_AWGNGainCtrl.SetWindowText( str);
-	str.Format("%g", Sgain );
-	m_SignalGainCtrl.SetWindowText( str);
-	str.Format("%g", pDoc->m_SigRMS );
-	m_SigRMSCtrl.SetWindowText( str);
-	str.Format("%g", pDoc->m_NoiseRMS );
-	m_NoiseRMSCtrl.SetWindowText( str);
-
-#ifdef TESTMODE
-	
-	str.Format("%g", gDebug1);
-	m_TestTextCtrl1.SetWindowText( str);
-	str.Format("%g", gDebug2);
-	m_TestTextCtrl2.SetWindowText( str);
-#endif
-	//go draw the data plots
-	if(m_pCPlotData && ( pDoc->m_SimState==SIMSTATE_ON ))
-		m_pCPlotData->DrawPlot();
-	return 0;
-}
-#endif

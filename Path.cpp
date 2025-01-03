@@ -1,67 +1,121 @@
 #include "Path.h"
 
-#define K_2PI ( 8.0 * atan(1.0) )			// 2 Pi
-#define OFFSET_FREQ_CONST (K_2PI/8000.0)	//2Pi/8000
-#define KGNB 0.62665707	//equivalent Noise BW of Gaussian shaped filter
+#include <assert.h>
 
-#define RATE_12_8 0		//Used for 0.1 > Spread >= 0.4
-#define RATE_64 1		//Used for 0.4 > Spread >= 2.0
-#define RATE_320 2		//Used for 2.0 > Spread >= 10.0
+#define _USE_MATH_DEFINES
+#include <math.h>
+
+static constexpr const double OFFSET_FREQ_CONST = 2. * M_PI / 8000.;
+static constexpr const double KGNB = 0.62665707; // equivalent Noise BW of Gaussian shaped filter
 
 namespace PathSim {
 
-Path::Path()
+void Rayleigh::init(double spread, double gain_coeff)
 {
-    m_Indx = 0;
-    m_NoiseSampRate = RATE_320;
+    assert(spread >= 0 && spread <= 30.0);
+    if (spread < 0.)
+        spread = 0.;
+    else if (spread > 30.0)
+        spread = 30.;
+    m_spread = spread;
+
+    if (spread < 0.1) {
+        // here if spread<.1 so will not use any spread just offset
+        m_sample_rate = SampleRate::Rate_None;
+        m_gain        = gain_coeff;
+    } else {
+        double rate;
+        if (spread > 2.0) {
+            m_sample_rate = SampleRate::Rate_320_Hz;
+            rate = 320.0;
+        } else if (spread > 0.4) {
+            m_sample_rate = SampleRate::Rate_64_Hz;
+            rate = 64.;
+        } else if (spread >= 0.1) {
+            m_sample_rate = SampleRate::Rate_12_point_8_Hz;
+            rate = 12.8;
+        }
+        m_lpfir.init(rate, spread);
+        m_gain = gain_coeff * sqrt(rate / (4.0 * spread * KGNB));
+
+        // preload m_lpfir
+        for (int i = 0; i < 250; ++ i)
+            this->sample();
+    }
 }
 
-void Path::InitPath( double Spread, double Offset, int blocksize, int numpaths, bool active)
+// Create the complex Rayleigh distributed samples by
+// creating two Gaussian random distributed numbers for the I and Q
+// terms and then passing them through a Gaussian shaped low pass FIR filter.
+// The 2 Sigma bandwidth of the LP filter determines the amount of spread.
+cmplx Rayleigh::sample()
 {
-    m_BlockSize = blocksize;
-    m_Offset = Offset;
-    m_Spread = Spread;
-    m_PathActive = active;
-    m_FirState0 = INTP_QUE_SIZE-1;
-    m_FirState1 = INTP_QUE_SIZE-1;
-    m_FirState2 = INTP_QUE_SIZE-1;
-    m_FirState3 = INTP_QUE_SIZE-1;
-    m_Indx = 0;
-    m_inc = 0;
-    m_Timeinc = 0.0;
-    if( (m_Spread > 2.0) && (m_Spread <= 30.0) )
-    {
-        m_NoiseSampRate = RATE_320;
-        m_lpfir.Init( 320.0, m_Spread );
-        m_LPGain = sqrt(320.0/(4.0*m_Spread*KGNB) );
-    }
-    else if( (m_Spread > 0.4) && (m_Spread <= 2.0) )
-    {
-        m_NoiseSampRate = RATE_64;
-        m_lpfir.Init( 64.0, m_Spread );
-        m_LPGain = sqrt(64.0/(4.0*m_Spread*KGNB) );
-    }
-    else if( (m_Spread >= 0.1) && (m_Spread <= 0.4) )
-    {
-        m_NoiseSampRate = RATE_12_8;
-        m_lpfir.Init( 12.8, m_Spread );
-        m_LPGain = sqrt(12.8/(4.0*m_Spread*KGNB) );
-    }
-    else if( (m_Spread >= 0.0) && (m_Spread < 0.1) )
-    {		//here if spread<.1 so will not use any spread just offset
-        m_NoiseSampRate = RATE_320;
-        m_LPGain = 1.0;
-    }
-    memset(m_pQue0, 0, sizeof(m_pQue0));
-    memset(m_pQue1, 0, sizeof(m_pQue1));
-    memset(m_pQue2, 0, sizeof(m_pQue2));
-    memset(m_pQue3, 0, sizeof(m_pQue3));
-    m_LPGain = m_LPGain/ sqrt((double)numpaths);
-    for(int i=0; i<250; i++)
-        MakeGaussianDelaySample();		//pre load filter
+    cmplx out;
+    if (m_spread >= 0.1) {
+        // Generate two uniform random numbers between -1 and +1 that are inside the unit circle.
+        cmplx  v;
+        double r2;
+        do {
+            // Generate vector inside a (-1, 1) x (-1, 1) 
+            auto rsample = [](){ return 1. - 2. * double(rand())/double(RAND_MAX); };
+            v.set(rsample(), rsample());
+            r2 = v.l2();
+            // Reject samples outside of the circle.
+        } while (r2 >= 1. || r2 == 0.);
+        // Convert the uniformly sampled unit radius circle distribution into
+        // a complex normal distribution, then low pass filter with a Gaussian shaped FIR filter.
+        // r2 has a uniform distribution in (0, 1)
+        // and v / sqrt(r2) is a unit vector,
+        // thus sqrt(- 2. * log(r2)) has a Rayleigh distribution
+        // and v * sqrt(- 2. * log(r2) / r2) has a complex normal distribution.
+        out = m_lpfir.apply(v * (m_gain * sqrt(- 2. * log(r2) / r2)));
+    } else
+        // Not using any spread.
+        out.set(m_gain, 0);
+
+    //gDebug1 = CalcCpxRMS( out, 288000);
+    //CalcCpxSweepRMS( out, 500);
+    return out;
 }
 
-//////////////////////////////////////////////////////////////////////
+void Path::Upsampler::init(int rate)
+{
+    memset(m_queue, 0, sizeof(m_queue));
+    m_ptr = INTP_QUE_SIZE - 1;
+    m_rate = rate;
+}
+
+void Path::Upsampler::insert_sample(cmplx v)
+{
+    m_queue[m_ptr / INTP_VALUE] = v;
+}
+
+cmplx Path::Upsampler::upsample()
+{
+    const cmplx*    firptr = m_queue;
+    const double*   kptr   = X5IntrpFIRCoef + INTP_FIR_SIZE - m_ptr;
+    cmplx           acc{ 0., 0. };
+    for (int j = 0; j < INTP_QUE_SIZE; ++ j, kptr += INTP_VALUE, ++ firptr)
+        acc += (*firptr) * (*kptr);
+    if (-- m_ptr < 0)
+        m_ptr = INTP_FIR_SIZE - 1;
+    return acc;
+}
+
+void Path::init_path(double spread, double offset, int blocksize, int numpaths)
+{
+    m_block_size        = blocksize;
+    m_offset_frequency  = offset;
+    m_index             = 0;
+    m_phase_acc         = 0.;
+
+    int rate = INTP_VALUE;
+    for (int i = 0; i < 4; ++ i, rate *= INTP_VALUE)
+       m_upsamplers[i].init(rate);
+
+    m_rayleigh.init(spread, 1. / sqrt(double(numpaths)));
+}
+
 // Performs a path calculation on pIn and puts it in pOut
 //
 //  Two Low Pass filtered Gaussian random numbers are created at
@@ -74,169 +128,29 @@ void Path::InitPath( double Spread, double Offset, int blocksize, int numpaths, 
 //
 //  Finally a complex NCO is multiplied by the signal to produce a
 //	Frequency offset.
-//////////////////////////////////////////////////////////////////////
-void Path::CalcPath(cmplx *pIn, cmplx *pOut)
+void Path::calc_path(const cmplx *pIn, cmplx *pOut)
 {
-int i,j;
-cmplx acc;
-cmplx tmp;
-const double* Kptr;
-cmplx* Firptr;
-cmplx offset;
-    if(m_PathActive)		// if this path is active
-    {
-        for(i=0; i<m_BlockSize; i++)
+    for (int i = 0; i < m_block_size; ++ i) {
         {
-            if( m_NoiseSampRate == RATE_12_8)
-            {
-                if( m_Indx%(5*5*5*5) == 0 )
-                {			//generate noise samples at 12.8Hz rate
-                    acc = MakeGaussianDelaySample();
-
-//SweepGenCpx(  &acc, 12.8, 0.0, 6.4, 0.016 );
-
-                    j = m_FirState0/INTP_VALUE;
-                    m_pQue0[j] = acc;
-                }
-            }
-            if( m_NoiseSampRate <= RATE_64)
-            {
-                if( m_Indx%(5*5*5) == 0 )
-                {
-                    if( m_NoiseSampRate == RATE_64)
-                    {			//generate noise samples at 64Hz rate
-                        acc = MakeGaussianDelaySample();
-                    }
-                    else
-                    {
-                        acc.r = 0.0; acc.i = 0.0;
-                        Firptr = m_pQue0;
-                        Kptr = X5IntrpFIRCoef+INTP_FIR_SIZE-m_FirState0;
-                        for(j=0; j<INTP_QUE_SIZE; j++)
-                        {
-                            acc.r += ( (Firptr->r)*(*Kptr) );
-                            acc.i += ( (Firptr++->i)*(*Kptr) );
-                            Kptr += INTP_VALUE;
-                        }
-                        if( --m_FirState0 < 0)
-                            m_FirState0 = INTP_FIR_SIZE-1;
-                    }
-
-//SweepGenCpx(  &acc, 64, 0.0, 32.0, 0.08 );
-
-                    j = m_FirState1/INTP_VALUE;
-                    m_pQue1[j] = acc;
-                }
-            }
-            if( m_Indx%(5*5) == 0 )	//interpolate/upsample x5
-            {
-                if( m_NoiseSampRate == RATE_320)
-                {
-                    acc = MakeGaussianDelaySample();
-                }
-                else
-                {
-                        acc.r = 0.0; acc.i = 0.0;
-                        Firptr = m_pQue1;
-                        Kptr = X5IntrpFIRCoef+INTP_FIR_SIZE-m_FirState1;
-                        for(j=0; j<INTP_QUE_SIZE; j++)
-                        {
-                            acc.r += ( (Firptr->r)*(*Kptr) );
-                            acc.i += ( (Firptr++->i)*(*Kptr) );
-                            Kptr += INTP_VALUE;
-                        }
-                        if( --m_FirState1 < 0)
-                            m_FirState1 = INTP_FIR_SIZE-1;
-                }
-
-//SweepGenCpx(  &acc, 320, 0.0, 160.0, 0.4 );
-
-                j = m_FirState2/INTP_VALUE;
-                m_pQue2[j] = acc;
-            }
-            if( m_Indx%(5) == 0 )	//interpolate/upsample x5
-            {
-                acc.r = 0.0; acc.i = 0.0;
-                Firptr = m_pQue2;
-                Kptr = X5IntrpFIRCoef+INTP_FIR_SIZE-m_FirState2;
-                for(j=0; j<INTP_QUE_SIZE; j++)
-                {
-                    acc.r += ( (Firptr->r)*(*Kptr) );
-                    acc.i += ( (Firptr++->i)*(*Kptr) );
-                    Kptr += INTP_VALUE;
-                }
-                if( --m_FirState2 < 0)
-                    m_FirState2 = INTP_FIR_SIZE-1;
-
-//SweepGenCpx(  &acc, 1600, 0.0, 800.0, 2 );
-
-                j = m_FirState3/INTP_VALUE;
-                m_pQue3[j] = acc;
-            }
-            acc.r = 0.0; acc.i = 0.0;
-            Firptr = m_pQue3;
-            Kptr = X5IntrpFIRCoef+INTP_FIR_SIZE-m_FirState3;
-            for(j=0; j<INTP_QUE_SIZE; j++)
-            {
-                acc.r += ( (Firptr->r)*(*Kptr) );
-                acc.i += ( (Firptr++->i)*(*Kptr) );
-                Kptr += INTP_VALUE;
-            }
-            if( --m_FirState3 < 0)
-                m_FirState3 = INTP_FIR_SIZE-1;
-
-//CalcCpxSweepRMS( acc, 8000);
-
-            tmp.r = (acc.r*pIn[i].r - acc.i*pIn[i].i);
-            tmp.i = (acc.r*pIn[i].i + acc.i*pIn[i].r);
-            offset.r = cos(m_Timeinc);		//Cpx multiply by offset frequency
-            offset.i = sin(m_Timeinc);
-            pOut[i].r = ((offset.r*tmp.r) - (offset.i*tmp.i));
-            pOut[i].i = ((offset.r*tmp.i) + (offset.i*tmp.r));
-            m_Timeinc += (OFFSET_FREQ_CONST*m_Offset);
-            m_Timeinc = fmod(m_Timeinc,K_2PI);	//keep radian counter bounded
-            if( ++m_Indx > (INTP_VALUE*INTP_VALUE*INTP_VALUE*INTP_VALUE*m_BlockSize) )
-                m_Indx = 0;
+            int j = int(m_rayleigh.sample_rate());
+            if (m_upsamplers[j].insert_at(m_index))
+                m_upsamplers[j].insert_sample(m_rayleigh.sample());
+            for (-- j; j >= 0; -- j)
+                if (m_upsamplers[j].insert_at(m_index))
+                    m_upsamplers[j].insert_sample(m_upsamplers[j + 1].upsample());
         }
+        cmplx fading = m_upsamplers[0].upsample();
+//CalcCpxSweepRMS( fading, 8000);
+        pOut[i] =
+            // Doppler
+            cmplx{cos(m_phase_acc), sin(m_phase_acc)} *
+            // Fading
+            (fading * pIn[i]);
+        // keep radian counter bounded
+        m_phase_acc = fmod(m_phase_acc + OFFSET_FREQ_CONST * m_offset_frequency, 2. * M_PI);
+        if (++ m_index >= INTP_VALUE*INTP_VALUE*INTP_VALUE*INTP_VALUE*m_block_size)
+            m_index = 0;
     }
-    else		// if path is not active just zero the output
-        memset(pOut, 0, sizeof(cmplx) * m_BlockSize);
-}
-
-// Create the complex Rayleigh distributed samples by
-// creating two Gaussian random distributed numbers for the I and Q
-// terms and then passing them through a Gaussian shaped LP IIR.
-// The 2 Sigma bandwidth of the LP filter determines the amount of spread.
-cmplx Path::MakeGaussianDelaySample()
-{
-    cmplx val;
-    if (m_Spread >= 0.1) {
-        // Generate two uniform random numbers between -1 and +1 that are inside the unit circle
-        double r2;
-        do {
-            val.r = 1.0 - 2.0 * (double)rand()/(double)RAND_MAX;
-            val.i = 1.0 - 2.0 * (double)rand()/(double)RAND_MAX;
-            r2 = val.r * val.r + val.i * val.i;
-        } while (r2 >= 1.0 || r2 == 0.0);
-
-        double scale = m_LPGain * sqrt(- 2.0 * log(r2) / r2);
-        val.r *= scale;
-        val.i *= scale;
-
-        //SweepGenCpx(  &val, 320, 0.0, 30*5, 30*5/200.0);
-
-        // Now LP filter the Gaussian samples
-        val = m_lpfir.CalcFilter(val);
-    } else
-    {
-        // Not using any spread.
-        val.r = m_LPGain;
-        val.i = 0;
-    }
-
-    //gDebug1 = CalcCpxRMS( val, 288000);
-    //CalcCpxSweepRMS( val, 500);
-    return val;
 }
 
 } // namespace PathSim

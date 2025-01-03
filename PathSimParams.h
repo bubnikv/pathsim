@@ -2,36 +2,40 @@
 #define PATHSIM_PARAMS_HPP
 
 #include <string>
+#include <vector>
 
 namespace PathSim {
 
-struct PathSimParams
+struct PathParams
 {
-	std::string title;
-	std::string cmdline_param;
-
-	// Is white gaussian noise generator enabled?
-	bool 	has_awgn	{ false };
-	// Signal to noise (SNR) value
-    double	snr		 	{ 10. };
-
-	bool 	has_path0 	{ false };
-	double	spread0	 	{ 1. };
-	double	offset0 	{ 0. };
-
-	bool 	has_path1 	{ false };
-	double	delay1  	{ 0. };
-	double	spread1 	{ 1. };
-	double	offset1 	{ 0. };
-
-	bool 	has_path2 	{ false };
-	double	delay2  	{ 0. };
-	double	spread2 	{ 1. };
-	double	offset2 	{ 0. };
+	// Delay of the path in ms, 0 to 30ms.
+	double  delay       { 0. };
+	// Raileigh spread
+	double	spread	 	{ 0. };
+	// Frequency offset in Hz
+	double	offset 		{ 0. };
 };
 
-static constexpr int default_params_cnt = 18;
-extern PathSimParams defaut_params[default_params_cnt];
+struct NoiseParams
+{
+	// Is white gaussian noise generator enabled?
+	bool 	has_awgn	{ false };
+	// Signal to noise (SNR) value, dB
+    double	snr		 	{ 10. };
+};
+
+struct PathSimParams
+{
+	// Description of the profile
+	std::string 			title;
+	// Name of the profile on command line
+	std::string 			cmdline_param;
+
+    std::vector<PathParams> paths;
+    NoiseParams             noise;
+};
+
+extern const std::vector<PathSimParams>& default_params();
 
 struct State {
 	double  m_SigRMS 			{ 0. };

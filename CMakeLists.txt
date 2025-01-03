@@ -19,8 +19,6 @@ set(PathSimSources
     PathSimParams.h
     PathSimProcessor.cpp
     PathSimProcessor.h
-    Perform.cpp
-    Perform.h
     )
 
 add_executable(pathsim ${PathSimSources})

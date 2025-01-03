@@ -7,6 +7,7 @@
 #include "Delay.h"
 
 #include <math.h>
+#include <utility>
 
 namespace PathSim {
 
@@ -22,29 +23,26 @@ public:
     void process_buffer(double *buffer);
 
 private:
-    double CalcRMS( double* buf);
-    double CalcRMS2( double* buf);
-
     double                  m_SigRMS 		{ 0. };
     double                  m_SignalGain 	{ 0. };
     double                  m_NoiseRMS  	{ 0. };
     double                  m_SNR 			{ 0. };
-    double                  m_SSum			{ 0. };
 
-    std::vector<cmplx>      m_pDelay0Buf;
-    std::vector<cmplx>      m_pDelay1Buf;
-    std::vector<cmplx>      m_pDelay2Buf;
+    struct PathWithBuffer {
+        Path                path;
+        std::vector<cmplx>  buffer;
+    };
+    std::vector<PathWithBuffer> m_paths;
+    Hilbert                 m_hilbert;
     Delay                   m_delay;
-    Path                    m_path0;
-    Path                    m_path1;
-    Path                    m_path2;
     NoiseGen                m_noise_gen;
 
     PathSimParams           m_params;
+
     // Direct path is active if m_params.has_path0/1/2 are all false.
     bool                    m_direct_path  { false };
 
-    // For visualization?
+    // Signal / Noise RMS, for diagnostics.
     State                   m_state;
 };
 
